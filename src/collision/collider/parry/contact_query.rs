@@ -16,7 +16,7 @@
 
 use crate::{collision::contact_types::SingleContact, prelude::*};
 use bevy::prelude::*;
-use parry::query::{PersistentQueryDispatcher, ShapeCastOptions, Unsupported};
+use parry::query::{PersistentQueryDispatcher, ShapeCastOptions, TrackedContact, Unsupported};
 
 /// An error indicating that a [contact query](self) is not supported for one of the [`Collider`] shapes.
 pub type UnsupportedShape = Unsupported;
@@ -235,7 +235,21 @@ pub fn contact_manifolds(
             return None;
         }
 
-        let points = manifold.contacts().iter().map(|contact| {
+        fn is_invalid_contact(contact: &&TrackedContact<()>) -> bool {
+            contact.dist == -1.0 && (contact.local_p1.x.is_nan() || contact.local_p1.y.is_nan() || contact.local_p2.x.is_nan() || contact.local_p2.y.is_nan())
+        }
+        
+        fn is_valid_contact(contact: &&TrackedContact<()>) -> bool {
+            !is_invalid_contact(contact)
+        }
+ 
+        let valid_contacts = manifold.contacts().iter().filter(is_valid_contact).collect::<Vec<_>>();
+        
+        if valid_contacts.is_empty() {
+            return None;
+        }
+
+        let points = valid_contacts.into_iter().map(|contact| {
             ContactPoint::new(
                 subpos1.transform_point(&contact.local_p1).into(),
                 subpos2.transform_point(&contact.local_p2).into(),
