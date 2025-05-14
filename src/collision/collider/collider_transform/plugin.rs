@@ -7,6 +7,7 @@ use bevy::{
     ecs::{intern::Interned, schedule::ScheduleLabel},
     prelude::*,
 };
+use itertools::Itertools;
 
 /// A plugin for propagating and updating transforms for colliders.
 ///
@@ -70,13 +71,25 @@ pub(crate) fn update_child_collider_position(
             &ColliderTransform,
             &mut Position,
             &mut Rotation,
+            Option<&ChildOf>,
             &ColliderOf,
         ),
         Without<RigidBody>,
     >,
-    rb_query: Query<(&Position, &Rotation), (With<RigidBody>, With<Children>)>,
+    parents_query: Query<&ChildOf>,
+    rb_query: Query<(&Position, &Rotation), With<RigidBody>>,
 ) {
-    for (collider_transform, mut position, mut rotation, collider_of) in &mut collider_query {
+    for (collider_transform, mut position, mut rotation, child_of_opt, collider_of) in &mut collider_query {
+        // Skip colliders that are not descendants of the rigid body.
+        {
+            let Some(&ChildOf(parent)) = child_of_opt else {
+                continue;
+            };
+            let is_descendant = parents_query.iter_ancestors(parent).contains(&collider_of.body);
+            if !is_descendant {
+                continue;
+            }
+        }
         let Ok((rb_pos, rb_rot)) = rb_query.get(collider_of.body) else {
             continue;
         };
